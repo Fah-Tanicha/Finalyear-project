@@ -1,0 +1,229 @@
+rm(list=ls()) # clear all variables and graphics
+graphics.off()
+dev.off()
+
+library(ggplot2)
+library(rTPC)
+library(nls.multstart)
+library(broom)
+library(tidyverse)
+library(boot)
+library(car)
+
+tpc2 <- read.csv('/Users/baiprongfah/FYP/r-set2.csv', stringsAsFactors = FALSE)
+tpc2 <- tpc2[-85,] #contamination W03 temp 18 rep3
+tpc2 <- tpc2[,-c(3,4,6,7)]
+as_tibble(tpc2)
+
+#subset each species
+s18 <- subset(tpc2, sp == 'S18' )
+w02 <- subset(tpc2, sp=='W02' )
+w03 <- subset(tpc2, sp =='W03' )
+
+# choose model
+mod = 'sharpschoolhigh_1981'
+
+#fit non-linear regression using Sharpe schoolfield model
+fit_s <-  nest(s18, data = c(temp, rate)) %>%
+  mutate(sharpeschoolhigh = map(data, ~nls_multstart(rate~sharpeschoolhigh_1981(temp = temp, r_tref,e,eh,th, tref = 15),
+                                                     data = .x,
+                                                     iter = c(3,3,3,3),
+                                                     start_lower = get_start_vals(.x$temp, .x$rate, model_name = 'sharpeschoolhigh_1981') - 10,
+                                                     start_upper = get_start_vals(.x$temp, .x$rate, model_name = 'sharpeschoolhigh_1981') + 10,
+                                                     lower = get_lower_lims(.x$temp, .x$rate, model_name = 'sharpeschoolhigh_1981'),
+                                                     upper = get_upper_lims(.x$temp, .x$rate, model_name = 'sharpeschoolhigh_1981'),
+                                                     supp_errors = 'Y',
+                                                     convergence_count = FALSE)),
+         # create new temperature data
+         new_data = map(data, ~tibble(temp = seq(min(.x$temp), max(.x$temp), length.out = 100))),
+         # predict over that data,
+         preds =  map2(sharpeschoolhigh, new_data, ~augment(.x, newdata = .y)))
+
+calc_params(fit_s) %>%
+  mutate_all(round,2)
+# unnest predictions
+pred_ss <- select(fit_s, preds) %>%
+  unnest(preds)
+colnames(pred_ss) <- c('temp','r')
+pred_ss$Species <- 'S18'
+
+fit_ww <- nest(w02, data = c(temp, rate)) %>%
+  mutate(sharpeschoolhigh = map(data, ~nls_multstart(rate~sharpeschoolhigh_1981(temp = temp, r_tref,e,eh,th, tref = 15),
+                                                     data = .x,
+                                                     iter = c(3,3,3,3),
+                                                     start_lower = get_start_vals(.x$temp, .x$rate, model_name = 'sharpeschoolhigh_1981') - 10,
+                                                     start_upper = get_start_vals(.x$temp, .x$rate, model_name = 'sharpeschoolhigh_1981') + 10,
+                                                     lower = get_lower_lims(.x$temp, .x$rate, model_name = 'sharpeschoolhigh_1981'),
+                                                     upper = get_upper_lims(.x$temp, .x$rate, model_name = 'sharpeschoolhigh_1981'),
+                                                     supp_errors = 'Y',
+                                                     convergence_count = FALSE)),
+         # create new temperature data
+         new_data = map(data, ~tibble(temp = seq(min(.x$temp), max(.x$temp), length.out = 100))),
+         # predict over that data,
+         preds =  map2(sharpeschoolhigh, new_data, ~augment(.x, newdata = .y)))
+# unnest predictions
+pred_ww <- select(fit_ww, preds) %>%
+  unnest(preds)
+colnames(pred_ww) <- c('temp','r')
+pred_ww$Species <- 'W02'
+
+fit_www <- nest(w03, data = c(temp, rate)) %>%
+  mutate(sharpeschoolhigh = map(data, ~nls_multstart(rate~sharpeschoolhigh_1981(temp = temp, r_tref,e,eh,th, tref = 15),
+                                                     data = .x,
+                                                     iter = c(3,3,3,3),
+                                                     start_lower = get_start_vals(.x$temp, .x$rate, model_name = 'sharpeschoolhigh_1981') - 10,
+                                                     start_upper = get_start_vals(.x$temp, .x$rate, model_name = 'sharpeschoolhigh_1981') + 10,
+                                                     lower = get_lower_lims(.x$temp, .x$rate, model_name = 'sharpeschoolhigh_1981'),
+                                                     upper = get_upper_lims(.x$temp, .x$rate, model_name = 'sharpeschoolhigh_1981'),
+                                                     supp_errors = 'Y',
+                                                     convergence_count = FALSE)),
+         # create new temperature data
+         new_data = map(data, ~tibble(temp = seq(min(.x$temp), max(.x$temp), length.out = 30))),
+         # predict over that data,
+         preds =  map2(sharpeschoolhigh, new_data, ~augment(.x, newdata = .y)))
+# unnest predictions
+pred_www <- select(fit_www, preds) %>%
+  unnest(preds)
+colnames(pred_www) <- c('temp','r')
+pred_www$Species <- 'W03'
+
+{####### plot data and model fit
+ggplot() +
+    geom_line(aes(temp, .fitted), pred_ss, col = 'blue') +
+    geom_point(aes(temp, rate), s18, size = 2, alpha = 0.5) +
+    theme_bw(base_size = 12) +
+    labs(x = 'Temperature (ºC)',
+         y = 'Growth rate',
+         title = 'Growth rate across temperatures')
+
+#combine dataframes
+z <- rbind(pred_ss, pred_ww,pred_www)
+
+#all 3 in the same plot
+ggplot(tpc2, aes(x=temp, y=rate))+
+  geom_point(alpha = 0.5)+
+  geom_line(data = z, aes(x = temp, y = r, col = Species), linewidth = 0.5) +
+  theme_bw(base_size = 12)+
+  labs(x = 'Temperature (ºC)',
+       y = 'Growth rate (1/hr)',
+       title = 'Temperature performance curves') +
+  geom_hline(aes(yintercept = 0), linetype = 2)+
+  scale_color_manual(values=c('darkgreen','darkblue','orange'))
+
+########bootstrpping##########
+# refit model using nlsLM
+s_nlsLM <- minpack.lm::nlsLM(rate~sharpeschoolhigh_1981(temp = temp, r_tref,e,eh,th, tref = 15),
+                               data = s18,
+                               start = coef(fit_s$sharpeschoolhigh[[1]]),
+                               lower = get_lower_lims(s18$temp, s18$rate, model_name = 'sharpeschoolhigh_1981'),
+                               upper = get_upper_lims(s18$temp, s18$rate, model_name = 'sharpeschoolhigh_1981'),
+                               weights = rep(1, times = nrow(s18)))
+w_nlsLM <- minpack.lm::nlsLM(rate~sharpeschoolhigh_1981(temp = temp, r_tref,e,eh,th, tref = 15),
+                             data = w02,
+                             start = coef(fit_ww$sharpeschoolhigh[[1]]),
+                             lower = get_lower_lims(w02$temp, w02$rate, model_name = 'sharpeschoolhigh_1981'),
+                             upper = get_upper_lims(w02$temp, w02$rate, model_name = 'sharpeschoolhigh_1981'),
+                             weights = rep(1, times = nrow(w02)))
+ww_nlsLM <- minpack.lm::nlsLM(rate~sharpeschoolhigh_1981(temp = temp, r_tref,e,eh,th, tref = 15),
+                              data = w03,
+                              start = coef(fit_www$sharpeschoolhigh[[1]]),
+                              lower = get_lower_lims(w03$temp, w03$rate, model_name = 'sharpeschoolhigh_1981'),
+                              upper = get_upper_lims(w03$temp, w03$rate, model_name = 'sharpeschoolhigh_1981'),
+                              weights = rep(1, times = nrow(w03)))
+
+# bootstrap using case resampling
+boot1 <- Boot(s_nlsLM, method = 'case')
+# look at the data
+head(boot1$t)
+# create predictions of each bootstrapped model
+boot1_preds <- boot1$t %>%
+  as.data.frame() %>%
+  drop_na() %>%
+  mutate(iter = 1:n()) %>%
+  group_by_all() %>%
+  do(data.frame(temp = seq(min(s18$temp), max(s18$temp), length.out = 100))) %>%
+  ungroup() %>%
+  mutate(pred = sharpeschoolhigh_1981(temp, r_tref, e, eh, th, tref = 15))
+# calculate bootstrapped confidence intervals
+boot1_conf_preds <- group_by(boot1_preds, temp) %>%
+  summarise(conf_lower = quantile(pred, 0.025),
+            conf_upper = quantile(pred, 0.975)) %>%
+  ungroup()
+
+# bootstrap using case resampling
+boot2 <- Boot(w_nlsLM, method = 'case')
+# look at the data
+head(boot2$t)
+# create predictions of each bootstrapped model
+boot2_preds <- boot2$t %>%
+    as.data.frame() %>%
+    drop_na() %>%
+    mutate(iter = 1:n()) %>%
+    group_by_all() %>%
+    do(data.frame(temp = seq(min(w02$temp), max(w02$temp), length.out = 100))) %>%
+    ungroup() %>%
+    mutate(pred = sharpeschoolhigh_1981(temp, r_tref, e, eh, th, tref = 15))
+# calculate bootstrapped confidence intervals
+boot2_conf_preds <- group_by(boot2_preds, temp) %>%
+    summarise(conf_lower = quantile(pred, 0.025),
+              conf_upper = quantile(pred, 0.975)) %>%
+    ungroup()
+
+# bootstrap using case resampling
+boot3 <- Boot(ww_nlsLM, method = 'case')
+  # look at the data
+head(boot3$t)
+  # create predictions of each bootstrapped model
+boot3_preds <- boot3$t %>%
+    as.data.frame() %>%
+    drop_na() %>%
+    mutate(iter = 1:n()) %>%
+    group_by_all() %>%
+    do(data.frame(temp = seq(min(w03$temp), max(w03$temp), length.out = 100))) %>%
+    ungroup() %>%
+    mutate(pred = sharpeschoolhigh_1981(temp, r_tref, e, eh, th, tref = 15))
+# calculate bootstrapped confidence intervals
+boot3_conf_preds <- group_by(boot3_preds, temp) %>%
+    summarise(conf_lower = quantile(pred, 0.025),
+              conf_upper = quantile(pred, 0.975)) %>%
+    ungroup()
+
+# plot bootstrapped CIs
+s1 <- ggplot() +
+  #geom_line(aes(temp, r), pred_ss, col = 'darkgreen') +
+  geom_ribbon(aes(temp, ymin = conf_lower, ymax = conf_upper), boot1_conf_preds, fill = 'lightgreen', alpha = 0.3) +
+  geom_line(aes(temp, pred, group = iter), boot1_preds, col = 'darkgreen', alpha = 0.007) + ## plot bootstrapped predictions
+  geom_point(aes(temp, rate), s18, size = 2, alpha = 0.5) +
+  theme_bw(base_size = 12) +
+  labs(x = 'Temperature (ºC)',
+       y = 'Growth rate (1/hr)',
+       title = 'Temperature performance curve of S18')
+s1
+
+
+
+########plot all 3###########
+plot <- ggplot()+ 
+  geom_point(aes(temp, rate), s18, size = 1.7, alpha = 0.5,col = 'darkgreen') +
+  geom_point(aes(temp, rate), w02, size = 1.7, alpha = 0.5, col = 'darkblue') +
+  geom_point(aes(temp, rate), w03, size = 1.7, alpha = 0.5, col = 'orange') +
+  geom_line(data = z, aes(x = temp, y = r, col = Species), linewidth = 1)+
+  scale_color_manual(values=c('darkgreen','darkblue','orange'))+
+  labs(x = 'Temperature (ºC)',
+       y = 'Growth rate (1/hr)',
+       title = 'Temperature performance curves')+
+  geom_hline(aes(yintercept = 0), linetype = 2)+
+  theme_bw(base_size = 12) 
+plot
+p <- plot + geom_ribbon(aes(temp, ymin = conf_lower, ymax = conf_upper), boot1_conf_preds, fill = 'lightgreen', alpha = 0.3) +
+  geom_line(aes(temp, pred, group = iter), boot1_preds, col = 'darkgreen', alpha = 0.007)
+p
+g <- p + geom_ribbon(aes(temp, ymin = conf_lower, ymax = conf_upper), boot2_conf_preds, fill = 'lightblue', alpha = 0.3) +
+  geom_line(aes(temp, pred, group = iter), boot2_preds, col = 'darkblue', alpha = 0.007)
+g
+k <- g + geom_ribbon(aes(temp, ymin = conf_lower, ymax = conf_upper), boot3_conf_preds, fill = 'yellow', alpha = 0.3) +
+  geom_line(aes(temp, pred, group = iter), boot3_preds, col = 'orange', alpha = 0.007)
+k
+
+
+
