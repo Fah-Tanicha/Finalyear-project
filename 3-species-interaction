@@ -1,0 +1,89 @@
+#The interaction between 3 bacteria species
+#This was done in python in a similar way as 2-species, except the function used. 
+
+# %%
+import pandas as pd
+import numpy as np
+
+# %%
+df = pd.read_csv('/Users/baiprongfah/FYP/interactions/CFU.csv')
+
+# %%
+#temperature 12 interaction Triplet : s18 as i , w02 as j, w03 as k  
+#Then I only changed which species to be i, j or k.
+ai = np.array(df.groupby(['temp','int']).get_group((28,'Tri'))["Cs18"])
+ai
+
+# %%
+aj = np.array(df.groupby(['temp','int']).get_group((28,'Tri'))["Cw02"])
+aj
+
+# %%
+ak = np.array(df.groupby(['temp','int']).get_group((28,'Tri'))["Cw03"])
+ak
+
+# %%
+from scipy.integrate import odeint
+from scipy.optimize import curve_fit 
+
+# %%
+time = [7.,24.,48.,100.] 
+
+# %%
+x = [ai, aj, ak]
+x = np.array(x)
+x = x.T
+x
+
+# %%
+def fun(x, t, aii, aij, aik):
+    ci, cj, ck = x
+    r = 0.151961842  #average intrinsic growth rate at each temperature 
+    return [ci,cj,ck * (r+ aii*ci + aij*cj+ aik*ck)]
+
+# %%
+yData = x[:4].T.flatten() #select 4 row in array x and collapse in 1 dimension
+yData
+
+# %%
+from scipy.optimize import curve_fit
+def fun_to_fit(t, aii, aij, aik):
+    results = odeint(fun, x[0], t, args = (aii,aij,aik)) #integrate the orginal eq 
+    results = results.T.flatten() #result is C in a function respect to time ci = f(t)
+    return results
+initial = (-0.00000000001, -0.00000000001, -0.00000000001)  #guessed aii and aij respectively
+popt, pcov = curve_fit(fun_to_fit, xdata = np.array(time), ydata = yData, p0= initial) #find optimal fit parameters to a defined function
+
+# %%
+popt
+
+# %%
+pcov
+
+# %%
+perr = np.sqrt(np.diag(pcov))
+perr
+
+# %%
+fit_curve = odeint(fun, x[0], t=time, args=(popt[0],popt[1],popt[2]))  #now use the popt in the eq we will get cal C respective to time 
+fit_curve
+
+# %%
+import matplotlib.pyplot as plt
+
+# %%
+plt.plot(time, fit_curve[:,0], 'o', color = 'red',alpha =0.5,linestyle = 'dashed')
+plt.plot(time, x[:,0], 'o',color = 'blue', alpha =0.5,linestyle = 'dashed')
+plt.show()
+
+# %%
+plt.plot(time, fit_curve[:,1], 'o', color = 'red',alpha =0.5,linestyle = 'dashed')
+plt.plot(time, x[:,1], 'o',color = 'blue', alpha =0.5,linestyle = 'dashed')
+plt.show()
+
+# %%
+plt.plot(time, fit_curve[:,2], 'o', color = 'red',alpha =0.5,linestyle = 'dashed')
+plt.plot(time, x[:,2], 'o',color = 'blue', alpha =0.5,linestyle = 'dashed')
+plt.show()
+
+
