@@ -1,0 +1,153 @@
+#This was done in python .
+#I extracted relative colony counts from each temperature and interaction.
+#The following was repeated for interaction betweeen S18-W03 and W02-W03.
+# %%
+import pandas as pd
+import numpy as np
+
+
+# %%
+df = pd.read_csv('/Users/baiprongfah/FYP/interactions/CFU.csv')
+
+
+# %%
+# interaction A : s18 as i , w02 as j
+ai = np.array(df.groupby(['temp','int']).get_group((18,'A'))["Cs18"])
+ai
+
+
+# %%
+aj = np.array(df.groupby(['temp','int']).get_group((18,'A'))["Cw02"])
+aj
+
+# %%
+#assign time points 
+#float will be easier to work with
+time = [7.,7.,24.,100.]  
+
+# %%
+from scipy.integrate import odeint
+from scipy.optimize import curve_fit 
+
+# %%
+#create array x which consists of ai and aj 
+x = [ai, aj]
+x = np.array(x)
+
+# %%
+x.shape # check shape, we need a long format 
+
+# %%
+x = x.T #tranpose x to long format
+x
+
+
+# %%
+#create function using the equation 
+def fun(x, t, aii, aij):
+    ci, cj = x
+    r = 0.087633333  #average intrinsic growth rate at each temperature 
+    return [ci, cj * (r+ aii*ci + aij*cj)]
+
+# %%
+yData = x[:4].T.flatten() #select 3 row in array x and collapse in 1 dimension
+yData
+
+# %%
+from scipy.optimize import curve_fit
+def fun_to_fit(t, aii, aij):
+    results = odeint(fun, x[0], t, args = (aii,aij)) #integrate the orginal eq 
+    results = results.T.flatten() #result is C in a function respect to time ci = f(t)
+    return results
+initial = (0.0000000001,0.000000000001)  #guessed aii and aij respectively
+popt, pcov = curve_fit(fun_to_fit, xdata = np.array(time), ydata = yData, p0=initial) #find optimal fit parameters to a defined function
+
+# %%
+popt #optimal parameters aii and aij respectively
+
+# %%
+pcov #covariates #look at the first column fiest row and second column second row (diagonal)
+
+# %%
+perr = np.sqrt(np.diag(pcov)) #R-squared
+perr
+
+# %%
+fit_curve = odeint(fun, x[0], t=time, args=(popt[0],popt[1]))  #now use the popt in the eq we will get cal C with respect to time 
+fit_curve
+
+# %%
+import matplotlib.pyplot as plt
+
+
+# %%
+plt.plot(time, fit_curve[:,0], 'o', color = 'red',alpha =0.5,linestyle = 'dashed') #now plot the estimated Ci
+plt.plot(time, x[:,0], 'o',color = 'blue', alpha =0.5,linestyle = 'dashed')  #our data Ci
+plt.show()
+
+# %%
+#now W02 as i , S18 as j
+#temperature 12 interaction A : s18 as j , w02 as i
+ai = np.array(df.groupby(['temp','int']).get_group((15,'A'))["Cw02"])
+ai
+
+# %%
+aj = np.array(df.groupby(['temp','int']).get_group((15,'A'))["Cs18"])
+aj
+
+# %%
+#create array z which consists of ai and aj 
+x = [ai, aj]
+x = np.array(x)
+x
+
+# %%
+x.shape 
+
+# %%
+x = x.T
+x
+
+# %%
+def fun(x, t, aii, aij):
+    ci, cj = x
+    r =0.1082  #average intrinsic growth rate at each temperature 
+    return [ci, cj * (r+ aii*ci + aij*cj)]
+
+# %%
+yData = x[:4].T.flatten() #select 3 row in array x and collapse in 1 dimension
+yData
+
+# %%
+from scipy.optimize import curve_fit
+def fun_to_fit(t, aii, aij):
+    results = odeint(fun, x[0], t, args = (aii,aij)) #integrate the orginal eq 
+    results = results.T.flatten() #result is C in a function respect to time ci = f(t)
+    return results
+initial = (0.0000000001,0.000000000001)  #guessed aii and aij respectively
+popt, pcov = curve_fit(fun_to_fit, xdata = np.array(time), ydata = yData, p0=initial) #find optimal fit parameters to a defined function
+
+# %%
+popt
+
+# %%
+pcov #The diagonals provide the variance of the parameter estimate.
+
+# %%
+perr = np.sqrt(np.diag(pcov)) #R-squared
+perr
+
+# %%
+fit_curve = odeint(fun, x[0], t=time, args=(popt[0],popt[1]))  #now use the popt in the eq we will get cal C respective to time 
+fit_curve
+
+
+# %%
+plt.plot(time, fit_curve[:,1], 'o', color = 'red',alpha =0.5,linestyle = 'dashed') #plot estimated Cj
+plt.plot(time, x[:,1], 'o',color = 'blue', alpha =0.5,linestyle = 'dashed') #our Cj data 
+plt.show()  
+
+# %% [markdown]
+# After looking at the plot, I chose the alpha_ij, alpha_ii from the initials that give the plot with 1 unfit point (i.e. 4 time points must have 3 points that estimated and actual C values overlap perfectly). 
+
+
