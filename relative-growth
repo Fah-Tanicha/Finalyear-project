@@ -1,0 +1,110 @@
+####Relative growth rate filtered/unfiltered #####
+rm(list=ls()) # clear all variables and graphics
+graphics.off()
+
+library(ggplot2)
+library(rTPC)
+library(nls.multstart)
+library(broom)
+library(tidyverse)
+
+data <- read.csv('/Users/baiprongfah/FYP/spent-media/relative-growth.csv', stringsAsFactors = FALSE)
+
+#unfil vs s18 fil
+s18 <- data[1:5] #only select S18 filtered med
+w02 <- data[1:6] #only select w02 filtered med
+w03 <- data[1:7] #only select w03 filtered med
+
+#Relative growth rate
+s18$ratio <- s18$s_fil/s18$r_unfil
+w02$ratio <- w02$w_fil/w02$r_unfil
+w03$ratio <- w03$ww_fil/w03$r_unfil
+
+#Log10 the relative growth rate
+s18$logr <- log10(s18$ratio)
+w02$logr <- log10(w02$ratio)
+w03$logr <- log10(w03$ratio)
+
+#only keep sp, temp, ratio for simplicity
+s18 <- s18[,-c(3,4,5,6)]
+w02 <- w02[,-c(3,4,5,6,7)]
+w03 <- w03[,-c(3,4,5,6,7,8)] 
+
+####filter ratio values e.g. inf or 0 returned, lack either media####
+s18 <- s18[-c(20,22,25,63,78),] # 103 out of 108 left
+w02 <- subset(w02, logr != Inf) #ratio 92 out of 108  # 92 out of 108 left
+w03 <- filter(w03, logr != -Inf & logr != Inf & temp != '15') #75 out of 108 left
+
+
+#######get average of the log ####
+s_ave <- filter(w03, sp == 'S18') %>%
+  group_by(temp) %>%
+  summarise(., sd = sd(logr),
+            ave_logr = mean(logr)) %>%
+  ungroup()
+
+w2_ave <- filter(w03, sp == 'W02') %>%
+  group_by(temp) %>%
+  summarise(., sd = sd(logr),
+            ave_logr = mean(logr)) %>%
+  ungroup()
+
+w3_ave <- filter(w03, sp == 'W03') %>%
+  group_by(temp) %>%
+  summarise(., sd = sd(logr),
+            ave_logr = mean(logr)) %>%
+  ungroup()
+
+#######plot mean log relative growth against temperature######
+#do this for each spent-medium
+s3 <- ggplot() +
+  geom_linerange(aes(x = temp, ymin = ave_logr - sd, ymax = ave_logr + sd), s_ave) +
+  geom_point(aes(temp, ave_logr), s_ave, size = 3, shape = 21, fill = 'green4') +
+  theme_bw(base_size = 12) +
+  theme(legend.position = 'none',
+        strip.text = element_text(hjust = 0),
+        strip.background = element_blank()) +
+  labs(x ='Temperature (ºC)',
+       y = 'log10(growth rate in spent-media/growth rate in fresh media)',
+       title = '(g)') +
+  geom_hline(aes(yintercept = 0), linetype = 2) +
+  theme(axis.title.y = element_blank())+
+  ylim(c(-2, 2))
+s3
+w3 <- ggplot() +
+  geom_linerange(aes(x = temp, ymin = ave_logr - sd, ymax = ave_logr + sd), w2_ave) +
+  geom_point(aes(temp, ave_logr), w2_ave, size = 3, shape = 21, fill = 'blue') +
+  theme_bw(base_size = 12) +
+  theme(legend.position = 'none',
+        strip.text = element_text(hjust = 0),
+        strip.background = element_blank()) +
+  labs(x ='Temperature (ºC)',
+       y = 'log10(growth rate in spent-media/growth rate in fresh media)',
+       title = '(h)') +
+  theme(axis.title.y = element_blank())+
+  geom_hline(aes(yintercept = 0), linetype = 2) +
+  ylim(c(-2, 2))
+w
+ww3 <- ggplot() +
+  geom_linerange(aes(x = temp, ymin = ave_logr - sd, ymax = ave_logr + sd), w3_ave) +
+  geom_point(aes(temp, ave_logr), w3_ave, size = 3, shape = 21, fill = 'orange') +
+  theme_bw(base_size = 12) +
+  theme(legend.position = 'none',
+        strip.text = element_text(hjust = 0),
+        strip.background = element_blank()) +
+  labs(x ='Temperature (ºC)',
+       y = 'log10(growth rate in spent-media/growth rate in fresh media)',
+       title = '(i)') +
+  theme(axis.title.y = element_blank())+
+  geom_hline(aes(yintercept = 0), linetype = 2) +
+  ylim(c(-2, 2))
+w.
+
+library(patchwork)
+s18_plots <- s|w|w.
+w2_plots <- ss|ww|www
+w3_plots <- s3|w3|ww3
+
+ggsave('relative_in_s18',plot=s18_plots, path ='/Users/baiprongfah/FYP/spent-media/',
+       width = 35, height = 15, units = "cm",device= 'png',dpi = 'print')
+dev.off()
